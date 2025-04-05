@@ -1,0 +1,90 @@
+# MODEL 4: FINAL SHAPE+ MODEL
+
+# Load Required Libraries
+if (!requireNamespace("lme4", quietly = TRUE)) install.packages("lme4")
+if (!requireNamespace("data.table", quietly = TRUE)) install.packages("data.table")
+
+library(lme4)
+library(data.table)
+
+# Load Smoothed MLB Dataset
+data <- fread("mlb_data_with_Smoothed_xRV_sep.csv")
+setDT(data)
+
+# Standardize Velocity
+mlb_mean <- mean(data$Velocity, na.rm = TRUE)
+mlb_sd <- sd(data$Velocity, na.rm = TRUE)
+data[, Velocity_Standardized := (Velocity - mlb_mean) / mlb_sd]
+
+# Load Model 3
+model3_mlb <- readRDS("model3_mlb_stuff_sep.rds")
+
+# Factor Level Matching
+factor_cols <- c("PitchGroup", "PitcherThrows", "BatterSide")
+for (col in factor_cols) {
+  if (col %in% names(data)) {
+    data[[col]] <- factor(data[[col]], levels = levels(model3_mlb@frame[[col]]))
+  }
+}
+
+# Predict xRV from Model 3
+data[, Predicted_xRV_Model3 := predict(model3_mlb, newdata = data, type = "response", allow.new.levels = TRUE)]
+
+# Compute StuffImpact (clipped for outlier control)
+data[, StuffImpact := -(Predicted_xRV_Model3 - Smoothed_xRV)]
+data[, StuffImpact := fifelse(StuffImpact > 5, 5,
+                       fifelse(StuffImpact < -5, -5, StuffImpact))]
+
+data[, StuffPlus := 100 + scale(StuffImpact) * 35]
+
+# Save Final Dataset
+fwrite(data, "mlb_data_with_StuffImpact_sep.csv")
+
+# Precompute Polynomial Terms for Final Linear Model
+data[, poly_Velo1 := poly(Velocity_Standardized, 2, raw = TRUE)[,1]]
+data[, poly_Velo2 := poly(Velocity_Standardized, 2, raw = TRUE)[,2]]
+
+data[, poly_IVB1 := poly(InducedVertBreak, 2, raw = TRUE)[,1]]
+data[, poly_IVB2 := poly(InducedVertBreak, 2, raw = TRUE)[,2]]
+
+data[, poly_HB1 := poly(HorzBreak, 2, raw = TRUE)[,1]]
+data[, poly_HB2 := poly(HorzBreak, 2, raw = TRUE)[,2]]
+
+data[, poly_Spin1 := poly(SpinRate, 2, raw = TRUE)[,1]]
+data[, poly_Spin2 := poly(SpinRate, 2, raw = TRUE)[,2]]
+
+data[, poly_VAA1 := poly(VertApprAngle, 2, raw = TRUE)[,1]]
+data[, poly_VAA2 := poly(VertApprAngle, 2, raw = TRUE)[,2]]
+
+data[, poly_Ext1 := poly(Extension, 2, raw = TRUE)[,1]]
+data[, poly_Ext2 := poly(Extension, 2, raw = TRUE)[,2]]
+
+data[, poly_RH1 := poly(RelHeight, 2, raw = TRUE)[,1]]
+data[, poly_RH2 := poly(RelHeight, 2, raw = TRUE)[,2]]
+
+# Final Model
+model4_mlb <- lm(StuffPlus ~
+                   poly_HB1 + poly_HB2 +
+                   poly_IVB1 + poly_IVB2 +
+                   I(HorzBreak * InducedVertBreak) +
+                   poly_Velo1 + poly_Velo2 +
+                   poly_VAA1 + poly_VAA2 +
+                   poly_Spin1 + poly_Spin2 +
+                   poly_Ext1 + poly_Ext2 +
+                   poly_RH1 + poly_RH2 +
+                   I(InducedVertBreak * Extension) +
+                   I(SpinRate * Velocity_Standardized) +
+                   I(VertApprAngle * Velocity_Standardized) +
+                   PitchGroup,
+                 data = data)
+
+# Save Model
+saveRDS(model4_mlb, "model4_mlb_stuff_final_sep.rds")
+
+# Check for Missing Stuff+ Values
+missing_stuffplus <- sum(is.na(data$StuffPlus))
+print(paste("🛑 Missing Stuff+ Values:", missing_stuffplus))
+
+if (missing_stuffplus > 0) {
+  print("⚠️ WARNING: Some Stuff+ values are NA. Check for missing input values or factor mismatch.")
+}
