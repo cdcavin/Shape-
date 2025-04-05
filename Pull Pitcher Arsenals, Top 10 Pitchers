@@ -1,0 +1,51 @@
+# Load Required Libraries
+library(data.table)
+library(dplyr)
+
+# Load summary dataset (with name and avg Shape+)
+summary_data <- fread("mlb_data_stuffimpact_era_sep.csv")
+
+# Load pitch-level Shape+ data
+pitch_data <- fread("mlb_data_with_StuffImpact_sep.csv")
+
+# Set minimum pitch count threshold
+min_pitches <- 1800  # <-- Adjust this number as needed
+
+# Compute pitch counts per pitcher in 2024
+pitch_counts <- pitch_data[game_year == 2024, .N, by = PitcherID]
+setnames(pitch_counts, "N", "TotalPitches")
+
+# Merge pitch counts with summary (which includes names)
+merged <- merge(summary_data, pitch_counts, by = "PitcherID", all.x = TRUE)
+
+# Filter for 2024 Shape+ and apply pitch count threshold
+top_pitchers_2024 <- merged[
+  TotalPitches >= min_pitches & !is.na(Average_StuffPlus_2024),
+  .(PitcherID, name, TotalPitches, Avg_ShapePlus_2024 = Average_StuffPlus_2024)
+][order(-Avg_ShapePlus_2024)][1:10]
+
+# Show Top 10 Pitchers
+print(top_pitchers_2024)
+
+# GET 2024 SHAPE+ ARSENAL FOR A PITCHER
+# Load libraries
+library(data.table)
+library(dplyr)
+
+# Load Shape+ data
+data <- fread("mlb_data_with_StuffImpact_sep.csv")
+
+# Set target PitcherID
+target_pitcher_id <-601713
+
+# Filter for 2024 and selected pitcher
+pitcher_data <- data[PitcherID == target_pitcher_id & game_year == 2024]
+
+# Calculate average Shape+ by pitch type (column still StuffPlus but renamed in output)
+pitcher_avg_shape <- pitcher_data[, .(
+  Count = .N,
+  Avg_ShapePlus_2024 = mean(StuffPlus, na.rm = TRUE)
+), by = TaggedPitchType][order(-Avg_ShapePlus_2024)]
+
+# Show results
+print(pitcher_avg_shape)
