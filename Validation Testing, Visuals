@@ -1,0 +1,464 @@
+# Load Required Libraries
+if (!requireNamespace("ggplot2", quietly = TRUE)) install.packages("ggplot2")
+if (!requireNamespace("data.table", quietly = TRUE)) install.packages("data.table")
+
+library(ggplot2)
+library(data.table)
+
+# Load MLB Data with Stuff+ and Smoothed xRV
+data <- fread("mlb_data_with_StuffImpact_sep.csv")
+
+# Filter for 2024 season only
+data_2023 <- data[game_year == 2024 & !is.na(StuffPlus) & !is.na(Smoothed_xRV)]
+
+# Scatter Plot of 2024 Stuff+ vs. Smoothed xRV with adjusted axes
+ggplot(data_2023, aes(x = StuffPlus, y = Smoothed_xRV)) +
+  geom_point(alpha = 0.3, color = "purple4") +
+  geom_smooth(method = "lm", color = "firebrick", se = FALSE, linewidth = 1) +
+  scale_x_continuous(limits = c(0, 300)) +
+  scale_y_continuous(limits = c(-0.25, 0.25)) +
+  labs(
+    title = "2024 Shape+ vs. 2024 Smoothed xRV",
+    x = "Shape+ (2024)",
+    y = "Smoothed xRV (2024)"
+  ) +
+  theme_minimal()
+
+# Calculate and Print Correlation
+correlation <- cor(data_2023$StuffPlus, data_2023$Smoothed_xRV, use = "complete.obs")
+print(paste("Correlation between 2024 Shape+ and 2024 Smoothed xRV:", round(correlation, 3)))
+
+# Assuming mlb_data is your dataset with actual and predicted values
+actual <- mlb_data$Smoothed_xRV
+predicted <- mlb_data$Predicted_xRV_Model3
+
+# Calculate RMSE (Root Mean Squared Error)
+rmse <- sqrt(mean((actual - predicted)^2, na.rm = TRUE))
+
+# Calculate MAE (Mean Absolute Error)
+mae <- mean(abs(actual - predicted), na.rm = TRUE)
+
+print(paste("RMSE:", rmse))
+print(paste("MAE:", mae))
+
+# COMBINE SHAPE+ DATA WITH VALIDATION DATA
+# Load Required Libraries
+library(dplyr)
+library(readr)
+library(data.table)
+
+# Load pitch-level dataset with Shape+, including game_year
+pitch_data <- fread("mlb_data_with_StuffImpact_sep.csv")
+
+# Compute average Shape+ per pitcher for each year
+avg_stuffplus_yearly <- pitch_data %>%
+  group_by(PitcherID, game_year) %>%
+  summarise(Average_StuffPlus = mean(StuffPlus, na.rm = TRUE), .groups = "drop") %>%
+  tidyr::pivot_wider(
+    names_from = game_year,
+    values_from = Average_StuffPlus,
+    names_prefix = "Average_StuffPlus_"
+  )
+
+# Load expected stats and rename for joining
+expected_stats <- read_csv("expected_stats.csv") %>%
+  rename(PitcherID = player_id, name = `last_name, first_name`)
+
+# Merge Shape+ and expected stats
+merged_summary <- avg_stuffplus_yearly %>%
+  left_join(expected_stats, by = "PitcherID") %>%
+  select(PitcherID, name, Average_StuffPlus_2023, Average_StuffPlus_2024, era, xera, woba)
+
+# Save final dataset
+fwrite(merged_summary, "mlb_data_stuffimpact_era_sep.csv")
+
+# Load Required Libraries
+if (!requireNamespace("ggplot2", quietly = TRUE)) install.packages("ggplot2")
+if (!requireNamespace("readr", quietly = TRUE)) install.packages("readr")
+if (!requireNamespace("dplyr", quietly = TRUE)) install.packages("dplyr")
+
+library(ggplot2)
+library(readr)
+library(dplyr)
+
+# Load the dataset with Stuff+ and 2024 outcome metrics
+data <- read_csv("mlb_data_stuffimpact_era_sep.csv")
+
+# Clean and filter data
+data_clean <- data %>%
+  filter(!is.na(Average_StuffPlus_2024), !is.na(era))
+
+# Create scatter plot
+ggplot(data_clean, aes(x = Average_StuffPlus_2024, y = era)) +
+  geom_point(alpha = 0.4, color = "steelblue") +
+  geom_smooth(method = "lm", color = "firebrick", se = FALSE) +
+  labs(
+    title = "Shape+ (2024) vs. ERA (2024)",
+    x = "Average Shape+ (2024)",
+    y = "ERA (2024)"
+  ) +
+  theme_minimal()
+
+# Calculate and print correlation
+cor_value <- cor(data_clean$Average_StuffPlus_2024, data_clean$era)
+print(paste("Correlation between Shape+ 2024 and ERA 2024:", round(cor_value, 3)))
+
+# Load Required Libraries
+if (!requireNamespace("ggplot2", quietly = TRUE)) install.packages("ggplot2")
+if (!requireNamespace("readr", quietly = TRUE)) install.packages("readr")
+if (!requireNamespace("dplyr", quietly = TRUE)) install.packages("dplyr")
+
+library(ggplot2)
+library(readr)
+library(dplyr)
+
+# Load the dataset with Shape+ and 2024 outcome metrics
+data <- read_csv("mlb_data_stuffimpact_era_sep.csv")
+
+# Clean and filter data
+data_clean <- data %>%
+  filter(!is.na(Average_StuffPlus_2024), !is.na(xera))
+
+# Create scatter plot
+ggplot(data_clean, aes(x = Average_StuffPlus_2024, y = xera)) +
+  geom_point(alpha = 0.4, color = "forestgreen") +
+  geom_smooth(method = "lm", color = "firebrick", se = FALSE) +
+  labs(
+    title = "Shape+ (2024) vs. xERA (2024)",
+    x = "Average Shape+ (2024)",
+    y = "xERA (2024)"
+  ) +
+  theme_minimal()
+
+# Calculate and print correlation
+cor_value <- cor(data_clean$Average_StuffPlus_2024, data_clean$xera)
+print(paste("Correlation between Shape+ 2024 and xERA 2024:", round(cor_value, 3)))
+
+# Load Required Libraries
+if (!requireNamespace("ggplot2", quietly = TRUE)) install.packages("ggplot2")
+if (!requireNamespace("readr", quietly = TRUE)) install.packages("readr")
+if (!requireNamespace("dplyr", quietly = TRUE)) install.packages("dplyr")
+
+library(ggplot2)
+library(readr)
+library(dplyr)
+
+# Load the dataset with Shape+ and 2024 outcome metrics
+data <- read_csv("mlb_data_stuffimpact_era_sep.csv")
+
+# Clean and filter data
+data_clean <- data %>%
+  filter(!is.na(Average_StuffPlus_2024), !is.na(woba))
+
+# Create scatter plot
+ggplot(data_clean, aes(x = Average_StuffPlus_2024, y = woba)) +
+  geom_point(alpha = 0.4, color = "darkorange") +
+  geom_smooth(method = "lm", color = "firebrick", se = FALSE) +
+  labs(
+    title = "Shape+ (2024) vs. wOBA (2024)",
+    x = "Average Shape+ (2024)",
+    y = "wOBA (2024)"
+  ) +
+  theme_minimal()
+
+# Calculate and print correlation
+cor_value <- cor(data_clean$Average_StuffPlus_2024, data_clean$woba)
+print(paste("Correlation between Shape+ 2024 and wOBA 2024:", round(cor_value, 3)))
+
+# ✅ Load Required Libraries
+library(readr)
+library(dplyr)
+
+# Load merged dataset with yearly Stuff+ and 2024 outcome metrics
+data <- read_csv("mlb_data_stuffimpact_era_sep.csv")
+
+# Drop rows with missing values
+data_clean <- data %>%
+  filter(!is.na(Average_StuffPlus_2023),
+         !is.na(Average_StuffPlus_2024),
+         !is.na(woba),
+         !is.na(xera),
+         !is.na(era))
+
+# Correlation: Year-over-Year Stuff+
+cor_stickiness <- cor(data_clean$Average_StuffPlus_2023, data_clean$Average_StuffPlus_2024)
+cat(" Stuff+ Stickiness (2023 vs 2024):", round(cor_stickiness, 3), "\n")
+
+# Predictive Correlations (Stuff+ 2023 vs. 2024 Stats)
+cor_woba <- cor(data_clean$Average_StuffPlus_2023, data_clean$woba)
+cor_xera <- cor(data_clean$Average_StuffPlus_2023, data_clean$xera)
+cor_era  <- cor(data_clean$Average_StuffPlus_2023, data_clean$era)
+
+cat("Predictive Correlation with wOBA 2024:", round(cor_woba, 3), "\n")
+cat("Predictive Correlation with xERA 2024:", round(cor_xera, 3), "\n")
+cat("Predictive Correlation with ERA 2024:",  round(cor_era, 3), "\n")
+
+# 2023 STUFF+ VS xERA 2024
+# Load Required Libraries
+if (!requireNamespace("ggplot2", quietly = TRUE)) install.packages("ggplot2")
+if (!requireNamespace("readr", quietly = TRUE)) install.packages("readr")
+if (!requireNamespace("dplyr", quietly = TRUE)) install.packages("dplyr")
+
+library(ggplot2)
+library(readr)
+library(dplyr)
+
+# Load the dataset with Stuff+ and 2024 outcome metrics
+data <- read_csv("mlb_data_stuffimpact_era_sep.csv")
+
+# Clean and filter data
+data_clean <- data %>%
+  filter(!is.na(Average_StuffPlus_2023), !is.na(xera))
+
+# Create scatter plot
+ggplot(data_clean, aes(x = Average_StuffPlus_2023, y = xera)) +
+  geom_point(alpha = 0.4, color = "forestgreen") +
+  geom_smooth(method = "lm", color = "firebrick", se = FALSE) +
+  labs(
+    title = "Shape+ (2023) vs. xERA (2024)",
+    x = "Average Shape+ (2023)",
+    y = "xERA (2024)"
+  ) +
+  theme_minimal()
+
+# Calculate and print correlation
+cor_value <- cor(data_clean$Average_StuffPlus_2023, data_clean$xera)
+print(paste("Correlation between Shape+ 2023 and xERA 2024:", round(cor_value, 3)))
+
+# 2023 STUFF+ VS 2024 wOBA
+# Load Required Libraries
+if (!requireNamespace("ggplot2", quietly = TRUE)) install.packages("ggplot2")
+if (!requireNamespace("readr", quietly = TRUE)) install.packages("readr")
+if (!requireNamespace("dplyr", quietly = TRUE)) install.packages("dplyr")
+
+library(ggplot2)
+library(readr)
+library(dplyr)
+
+# Load the dataset with Stuff+ and 2024 outcome metrics
+data <- read_csv("mlb_data_stuffimpact_era_sep.csv")
+
+# Clean and filter data
+data_clean <- data %>%
+  filter(!is.na(Average_StuffPlus_2023), !is.na(woba))
+
+# Create scatter plot
+ggplot(data_clean, aes(x = Average_StuffPlus_2023, y = woba)) +
+  geom_point(alpha = 0.4, color = "darkorange") +
+  geom_smooth(method = "lm", color = "darkred", se = FALSE) +
+  labs(
+    title = "Shape+ (2023) vs. wOBA (2024)",
+    x = "Average Shape+ (2023)",
+    y = "wOBA (2024)"
+  ) +
+  theme_minimal()
+
+# Calculate and print correlation
+cor_value <- cor(data_clean$Average_StuffPlus_2023, data_clean$woba)
+print(paste("Correlation between Shape+ 2023 and wOBA 2024:", round(cor_value, 3)))
+
+# 2023 STUFF+ VS 2024 ERA
+# Load Required Libraries
+if (!requireNamespace("ggplot2", quietly = TRUE)) install.packages("ggplot2")
+if (!requireNamespace("readr", quietly = TRUE)) install.packages("readr")
+if (!requireNamespace("dplyr", quietly = TRUE)) install.packages("dplyr")
+
+library(ggplot2)
+library(readr)
+library(dplyr)
+
+# Load the dataset with Stuff+ and 2024 outcome metrics
+data <- read_csv("mlb_data_stuffimpact_era_sep.csv")
+
+# Clean and filter data
+data_clean <- data %>%
+  filter(!is.na(Average_StuffPlus_2023), !is.na(era))
+
+# Create scatter plot
+ggplot(data_clean, aes(x = Average_StuffPlus_2023, y = era)) +
+  geom_point(alpha = 0.4, color = "steelblue") +
+  geom_smooth(method = "lm", color = "firebrick", se = FALSE) +
+  labs(
+    title = "Shape+ (2023) vs. ERA (2024)",
+    x = "Average Shape+ (2023)",
+    y = "ERA (2024)"
+  ) +
+  theme_minimal()
+
+# Calculate and print correlation
+cor_value <- cor(data_clean$Average_StuffPlus_2023, data_clean$era)
+print(paste("Correlation between Shape+ 2023 and ERA 2024:", round(cor_value, 3)))
+
+# RESIDUALS PLOT
+# Load Required Libraries
+library(data.table)
+library(dplyr)
+library(ggplot2)
+
+# Load Dataset
+data <- fread("mlb_data_with_StuffImpact_sep.csv")
+
+# Sample 10000 Points for Faster Plotting
+sampled_data <- data %>% sample_n(10000)
+
+# Plot Residuals: Stuff+ vs. Smoothed_xRV
+ggplot(sampled_data, aes(x = StuffPlus, y = Smoothed_xRV)) +
+  geom_point(alpha = 0.4, color = "steelblue") +
+  geom_smooth(method = "lm", color = "darkred", se = FALSE) +
+  labs(title = "Residuals Check: Shape+ vs Smoothed xRV",
+       x = "Shape+",
+       y = "Smoothed xRV") +
+  theme_minimal()
+
+# Load Required Libraries
+library(ggplot2)
+library(data.table)
+
+# Load and filter Stuff+ data for 2023
+mlb_data <- fread("mlb_data_with_StuffImpact_sep.csv")
+mlb_data <- mlb_data[game_year == 2023 & !is.na(StuffPlus) & !is.na(TaggedPitchType)]
+
+# Get top 10 pitch types (2023 only)
+top_pitches <- mlb_data[, .N, by = TaggedPitchType][order(-N)][1:10, TaggedPitchType]
+mlb_filtered <- mlb_data[TaggedPitchType %in% top_pitches]
+mlb_filtered[, TaggedPitchType := factor(TaggedPitchType, levels = sort(unique(TaggedPitchType)))]
+
+# Compute medians
+medians <- mlb_filtered[, .(median_StuffPlus = round(median(StuffPlus), 1)), by = TaggedPitchType]
+
+# Plot
+ggplot(mlb_filtered, aes(x = StuffPlus, y = TaggedPitchType, fill = TaggedPitchType)) +
+  geom_boxplot(
+    width = 0.4,
+    outlier.size = 0.8,
+    outlier.alpha = 0.2,
+    alpha = 0.75,
+    color = "black"
+  ) +
+  geom_text(
+    data = medians,
+    aes(x = median_StuffPlus, y = TaggedPitchType, label = median_StuffPlus),
+    inherit.aes = FALSE,
+    hjust = -0.4,
+    size = 3.5,
+    fontface = "bold"
+  ) +
+  scale_x_continuous(limits = c(20, 200), expand = c(0.01, 0)) +
+  labs(
+    title = "Shape+ Distribution by Pitch Type (2023 Only)",
+    x = "Shape+",
+    y = "Pitch Type",
+    fill = "Pitch Type"
+  ) +
+  theme_minimal(base_size = 13) +
+  theme(
+    legend.position = "none",
+    plot.title = element_text(face = "bold", size = 15),
+    axis.title = element_text(face = "bold"),
+    axis.text.y = element_text(face = "bold")
+  )
+
+# Load Required Libraries
+library(ggplot2)
+library(data.table)
+
+# Load and filter Stuff+ data for 2024
+mlb_data <- fread("mlb_data_with_StuffImpact_sep.csv")
+mlb_data <- mlb_data[game_year == 2024 & !is.na(StuffPlus) & !is.na(TaggedPitchType)]
+
+# Get top 10 pitch types (2024 only)
+top_pitches <- mlb_data[, .N, by = TaggedPitchType][order(-N)][1:10, TaggedPitchType]
+mlb_filtered <- mlb_data[TaggedPitchType %in% top_pitches]
+mlb_filtered[, TaggedPitchType := factor(TaggedPitchType, levels = sort(unique(TaggedPitchType)))]
+
+# Compute medians
+medians <- mlb_filtered[, .(median_StuffPlus = round(median(StuffPlus), 1)), by = TaggedPitchType]
+
+# Plot
+ggplot(mlb_filtered, aes(x = StuffPlus, y = TaggedPitchType, fill = TaggedPitchType)) +
+  geom_boxplot(
+    width = 0.4,
+    outlier.size = 0.8,
+    outlier.alpha = 0.2,
+    alpha = 0.75,
+    color = "black"
+  ) +
+  geom_text(
+    data = medians,
+    aes(x = median_StuffPlus, y = TaggedPitchType, label = median_StuffPlus),
+    inherit.aes = FALSE,
+    hjust = -0.4,
+    size = 3.5,
+    fontface = "bold"
+  ) +
+  scale_x_continuous(limits = c(20, 200), expand = c(0.01, 0)) +
+  labs(
+    title = "Shape+ Distribution by Pitch Type (2024 Only)",
+    x = "Shape+",
+    y = "Pitch Type",
+    fill = "Pitch Type"
+  ) +
+  theme_minimal(base_size = 13) +
+  theme(
+    legend.position = "none",
+    plot.title = element_text(face = "bold", size = 15),
+    axis.title = element_text(face = "bold"),
+    axis.text.y = element_text(face = "bold")
+  )
+
+# Load Required Libraries
+library(ggplot2)
+library(data.table)
+
+# Load and filter data
+mlb_data <- fread("mlb_data_with_StuffImpact_sep.csv")
+mlb_data <- mlb_data[!is.na(StuffPlus)]
+
+# Plot histogram of Stuff+ scores
+ggplot(mlb_data, aes(x = StuffPlus)) +
+  geom_histogram(
+    bins = 60,
+    fill = "steelblue",
+    color = "black",
+    alpha = 0.7
+  ) +
+  scale_x_continuous(limits = c(0, 200), expand = c(0.01, 0)) +
+  labs(
+    title = "Overall Distribution of Shape+ Scores",
+    x = "Shape+",
+    y = "Count"
+  ) +
+  theme_minimal(base_size = 13) +
+  theme(
+    plot.title = element_text(face = "bold", size = 15),
+    axis.title = element_text(face = "bold")
+  )
+
+# Load Required Libraries
+library(ggplot2)
+library(data.table)
+
+# Load and filter data
+mlb_data <- fread("mlb_data_with_StuffImpact_sep.csv")
+mlb_data <- mlb_data[!is.na(StuffPlus) & !is.na(TaggedPitchType)]
+
+# Optional: Focus on top 8 pitch types for clarity
+top_pitches <- mlb_data[, .N, by = TaggedPitchType][order(-N)][1:8, TaggedPitchType]
+mlb_data <- mlb_data[TaggedPitchType %in% top_pitches]
+
+# Plot density curves by pitch type
+ggplot(mlb_data, aes(x = StuffPlus, color = TaggedPitchType)) +
+  geom_density(size = 1.2, alpha = 0.7) +
+  scale_x_continuous(limits = c(10, 200), expand = c(0.01, 0)) +
+  labs(
+    title = "Shape+ Distribution by Pitch Type (Smoothed Density)",
+    x = "Shape+",
+    y = "Density",
+    color = "Pitch Type"
+  ) +
+  theme_minimal(base_size = 13) +
+  theme(
+    plot.title = element_text(face = "bold", size = 15),
+    axis.title = element_text(face = "bold"),
+    legend.title = element_text(face = "bold")
+  )
