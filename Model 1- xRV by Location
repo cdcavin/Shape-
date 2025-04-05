@@ -1,0 +1,176 @@
+# MODEL 1- LOCATION BASED
+# Install and Load Required Libraries
+if (!requireNamespace("lme4", quietly = TRUE)) install.packages("lme4")
+if (!requireNamespace("data.table", quietly = TRUE)) install.packages("data.table")
+
+library(lme4)
+library(data.table)
+
+# Load MLB Dataset
+data <- fread("model1_data.csv")
+setDT(data)
+
+# Standardize Pitch Types
+data[, TaggedPitchType := fcase(
+  TaggedPitchType %in% c("CH", "ChangeUp"), "CH",
+  TaggedPitchType %in% c("CU", "Curveball"), "CU",
+  TaggedPitchType %in% c("FC", "Cutter"), "FC",
+  TaggedPitchType %in% c("FF", "Four-Seam Fastball", "FA", "Fastball"), "FF",
+  TaggedPitchType %in% c("SI", "TwoSeamFastBall", "Sinker"), "SI",
+  TaggedPitchType %in% c("SL", "Slider"), "SL",
+  TaggedPitchType %in% c("FS"), "FS",
+  TaggedPitchType %in% c("ST", "Sweeper"), "ST",
+  TaggedPitchType %in% c("SC", "Screwball"), "SC",
+  TaggedPitchType %in% c("KC", "Knuckle Curve"), "KC",
+  TaggedPitchType %in% c("FO", "Forkball"), "FO",
+  TaggedPitchType %in% c("KN", "Knuckleball"), "KN",
+  TaggedPitchType %in% c("EP", "Eephus"), "EP",
+  default = NA_character_
+)]
+
+# Group into 3 Pitch Buckets
+data[, PitchGroup := fcase(
+  TaggedPitchType %in% c("FF", "SI", "FC"), "Fastball",
+  TaggedPitchType %in% c("CH", "FS", "FO"), "Changeup",
+  TaggedPitchType %in% c("SL", "CU", "KC", "SV", "ST", "SC"), "BreakingBall",
+  default = NA_character_
+)]
+
+# Remove Unclassified Pitches
+data <- data[!is.na(PitchGroup)]
+
+# Create PlatoonAdvantage (1 if same-handed, else 0)
+data[, PlatoonAdvantage := as.factor(fifelse(BatterSide == PitcherThrows, 1, 0))]
+
+# Convert Key Categorical Variables to Factors
+cols_to_factor <- c("PitchGroup", "TaggedPitchType", "PitcherID", "BatterID", "PlatoonAdvantage")
+data[, (cols_to_factor) := lapply(.SD, as.factor), .SDcols = cols_to_factor]
+
+# Create 150x150 Bins for Plate Location
+data[, PlateLocHeight_Bin := cut(PlateLocHeight,
+  breaks = seq(min(PlateLocHeight, na.rm = TRUE), max(PlateLocHeight, na.rm = TRUE), length.out = 150),
+  labels = FALSE, include.lowest = TRUE
+)]
+
+data[, PlateLocSide_Bin := cut(PlateLocSide,
+  breaks = seq(min(PlateLocSide, na.rm = TRUE), max(PlateLocSide, na.rm = TRUE), length.out = 150),
+  labels = FALSE, include.lowest = TRUE
+)]
+
+# Remove Rows with NA in Bins
+data <- data[!is.na(PlateLocHeight_Bin) & !is.na(PlateLocSide_Bin)]
+
+# Convert Bins to Factors
+data[, PlateLocHeight_Bin := as.factor(PlateLocHeight_Bin)]
+data[, PlateLocSide_Bin := as.factor(PlateLocSide_Bin)]
+
+# Fit Model 1
+model1 <- lmer(
+  run_value ~
+    Balls + Strikes + PlatoonAdvantage +
+    PitchGroup * PlateLocHeight_Bin + PitchGroup * PlateLocSide_Bin +
+    PitchGroup * Balls + PitchGroup * Strikes +
+    (1 | PitcherID) + (1 | BatterID),
+  data = data,
+  REML = FALSE
+)
+
+# Output and Save
+summary(model1)
+saveRDS(model1, "model1_mlb_seperate.rds")
+
+# MODEL 1- VISUALS + PREDICTIONS
+# Install & Load Required Libraries
+if (!requireNamespace("gridExtra", quietly = TRUE)) install.packages("gridExtra")
+if (!requireNamespace("lme4", quietly = TRUE)) install.packages("lme4")
+
+library(lme4)
+library(data.table)
+library(ggplot2)
+library(gridExtra)
+
+# Load Model and MLB Data
+model1 <- readRDS("model1_mlb_seperate.rds")
+data <- fread("model1_data.csv")
+setDT(data)
+
+# Standardize Pitch Types
+data[, TaggedPitchType := fcase(
+  TaggedPitchType %in% c("CH", "ChangeUp"), "CH",
+  TaggedPitchType %in% c("CU", "Curveball"), "CU",
+  TaggedPitchType %in% c("FC", "Cutter"), "FC",
+  TaggedPitchType %in% c("FF", "Four-Seam Fastball", "FA", "Fastball"), "FF",
+  TaggedPitchType %in% c("SI", "TwoSeamFastBall", "Sinker"), "SI",
+  TaggedPitchType %in% c("SL", "Slider"), "SL",
+  TaggedPitchType %in% c("FS"), "FS",
+  TaggedPitchType %in% c("ST", "Sweeper"), "ST",
+  TaggedPitchType %in% c("SC", "Screwball"), "SC",
+  TaggedPitchType %in% c("KC", "Knuckle Curve"), "KC",
+  TaggedPitchType %in% c("FO", "Forkball"), "FO",
+  TaggedPitchType %in% c("KN", "Knuckleball"), "KN",
+  TaggedPitchType %in% c("EP", "Eephus"), "EP",
+  default = NA_character_
+)]
+
+# Group into Pitch Buckets
+data[, PitchGroup := fcase(
+  TaggedPitchType %in% c("FF", "SI", "FC"), "Fastball",
+  TaggedPitchType %in% c("CH", "FS", "FO"), "Changeup",
+  TaggedPitchType %in% c("SL", "CU", "KC", "SV", "ST", "SC"), "BreakingBall",
+  default = NA_character_
+)]
+data <- data[!is.na(PitchGroup)]
+
+# Platoon Advantage
+data[, PlatoonAdvantage := as.factor(fifelse(BatterSide == PitcherThrows, 1, 0))]
+
+# Factor Columns
+factor_cols <- c("PitchGroup", "TaggedPitchType", "PlatoonAdvantage", "PitcherID", "BatterID")
+data[, (factor_cols) := lapply(.SD, as.factor), .SDcols = factor_cols]
+
+# Binning (must match model, e.g., 150x150 or 200x200)
+data[, PlateLocHeight_Bin := cut(PlateLocHeight,
+                                 breaks = seq(min(PlateLocHeight, na.rm = TRUE),
+                                              max(PlateLocHeight, na.rm = TRUE), length.out = 150),
+                                 labels = FALSE, include.lowest = TRUE)]
+data[, PlateLocSide_Bin := cut(PlateLocSide,
+                               breaks = seq(min(PlateLocSide, na.rm = TRUE),
+                                            max(PlateLocSide, na.rm = TRUE), length.out = 150),
+                               labels = FALSE, include.lowest = TRUE)]
+data <- data[!is.na(PlateLocHeight_Bin) & !is.na(PlateLocSide_Bin)]
+data[, PlateLocHeight_Bin := as.factor(PlateLocHeight_Bin)]
+data[, PlateLocSide_Bin := as.factor(PlateLocSide_Bin)]
+
+# Predict xRV
+data[, xRV := predict(model1, newdata = data, allow.new.levels = TRUE)]
+
+# Save with xRV
+fwrite(data, "mlb_data_with_xRV_seperate.csv")
+
+# Original-Style Heatmap Function
+plot_xRV_heatmap <- function(df, title) {
+  ggplot(df, aes(x = PlateLocSide, y = PlateLocHeight, fill = xRV)) +
+    stat_density_2d(geom = "raster", aes(fill = after_stat(density)), contour = FALSE) +
+    scale_fill_viridis_c(option = "magma", direction = -1) +
+    labs(title = title, x = "Horizontal Location", y = "Vertical Location", fill = "xRV") +
+    geom_rect(aes(xmin = -0.83, xmax = 0.83, ymin = 1.5, ymax = 3.5),
+              color = "black", fill = NA, linewidth = 1.2) +
+    coord_fixed() +
+    theme_minimal()
+}
+
+# Fastball Heatmaps
+fastball_rhp_rhh <- plot_xRV_heatmap(data[PitcherThrows == "R" & BatterSide == "R" & PitchGroup == "Fastball"], "RHP vs RHH - Fastball xRV")
+fastball_rhp_lhh <- plot_xRV_heatmap(data[PitcherThrows == "R" & BatterSide == "L" & PitchGroup == "Fastball"], "RHP vs LHH - Fastball xRV")
+fastball_lhp_rhh <- plot_xRV_heatmap(data[PitcherThrows == "L" & BatterSide == "R" & PitchGroup == "Fastball"], "LHP vs RHH - Fastball xRV")
+fastball_lhp_lhh <- plot_xRV_heatmap(data[PitcherThrows == "L" & BatterSide == "L" & PitchGroup == "Fastball"], "LHP vs LHH - Fastball xRV")
+
+# Changeup Heatmaps
+changeup_rhp_rhh <- plot_xRV_heatmap(data[PitcherThrows == "R" & BatterSide == "R" & PitchGroup == "Changeup"], "RHP vs RHH - Changeup xRV")
+changeup_rhp_lhh <- plot_xRV_heatmap(data[PitcherThrows == "R" & BatterSide == "L" & PitchGroup == "Changeup"], "RHP vs LHH - Changeup xRV")
+changeup_lhp_rhh <- plot_xRV_heatmap(data[PitcherThrows == "L" & BatterSide == "R" & PitchGroup == "Changeup"], "LHP vs RHH - Changeup xRV")
+changeup_lhp_lhh <- plot_xRV_heatmap(data[PitcherThrows == "L" & BatterSide == "L" & PitchGroup == "Changeup"], "LHP vs LHH - Changeup xRV")
+
+# Display Grids
+grid.arrange(fastball_rhp_rhh, fastball_rhp_lhh, fastball_lhp_rhh, fastball_lhp_lhh, ncol = 2)
+grid.arrange(changeup_rhp_rhh, changeup_rhp_lhh, changeup_lhp_rhh, changeup_lhp_lhh, ncol = 2)
