@@ -1,0 +1,8 @@
+# Ignore entire data folder
+data/
+
+# Ignore any CSV files in the repository
+*.csv
+git add .gitignore
+git commit -m 
+git push
