@@ -1,0 +1,80 @@
+# MODEL 2- GAM SMOOTHING
+# Install Required Packages
+if (!requireNamespace("mgcv", quietly = TRUE)) install.packages("mgcv")
+if (!requireNamespace("data.table", quietly = TRUE)) install.packages("data.table")
+
+# Load Libraries
+library(mgcv)
+library(data.table)
+
+# Load MLB Dataset with xRV from Model 1
+data <- fread("mlb_data_with_xRV_seperate.csv")
+setDT(data)
+
+# Fit GAM Model to Smooth xRV by Plate Location
+gam_model2 <- gam(
+  xRV ~ s(PlateLocSide, PlateLocHeight, bs = "tp") +
+    PitchGroup + Balls + Strikes + PlatoonAdvantage,
+  data = data,
+  method = "REML"
+)
+
+# Save the GAM Model
+saveRDS(gam_model2, "model2_gam_mlb_seperate.rds")
+
+# Predict Smoothed xRV
+data[, Smoothed_xRV := predict(gam_model2, newdata = data, type = "response")]
+
+# Save Updated Dataset
+fwrite(data, "mlb_data_with_Smoothed_xRV_sep.csv")
+
+# VISUALS MODEL 2 EVERY PITCH
+# Install & Load Required Libraries
+if (!requireNamespace("gridExtra", quietly = TRUE)) install.packages("gridExtra")
+library(data.table)
+library(ggplot2)
+library(gridExtra)
+library(mgcv)
+
+# Load Model 2 (MLB Smoothed GAM)
+model2 <- readRDS("model2_gam_mlb_seperate.rds")
+
+# Load MLB Data with Smoothed xRV
+data <- fread("mlb_data_with_Smoothed_xRV_sep.csv")
+setDT(data)
+
+# Get Unique Standardized Pitch Types
+pitch_types <- unique(data$TaggedPitchType)
+
+# Smoothed xRV Heatmap Plotting Function
+plot_smoothed_xRV <- function(df, title) {
+  ggplot(df, aes(x = PlateLocSide, y = PlateLocHeight, fill = Smoothed_xRV)) +
+    stat_density_2d(geom = "raster", aes(fill = after_stat(density)), contour = FALSE) +
+    scale_fill_viridis_c(option = "magma", direction = -1) +
+    labs(title = title, x = "Horizontal Location", y = "Vertical Location", fill = "Smoothed xRV") +
+    geom_rect(aes(xmin = -0.83, xmax = 0.83, ymin = 1.5, ymax = 3.5),
+              color = "black", fill = NA, linewidth = 1.2) +
+    coord_fixed() +
+    theme_minimal()
+}
+
+# Loop Through Each Pitch Type and Plot Matchups
+for (pitch in pitch_types) {
+  # Filter for pitch type
+  data_pitch <- data[TaggedPitchType == pitch]
+
+  # Predict smoothed xRV using Model 2 (again, if needed)
+  data_pitch[, Smoothed_xRV := predict(model2, newdata = data_pitch, type = "response")]
+
+  # Save updated pitch-type dataset
+  fwrite(data_pitch, paste0("mlb_data_smoothed_xRV_sep", pitch, ".csv"))
+
+  # Generate heatmaps by pitcher/batter handedness
+  rhp_rhh <- plot_smoothed_xRV(data_pitch[PitcherThrows == "R" & BatterSide == "R"], paste("RHP vs RHH -", pitch, "xRV"))
+  rhp_lhh <- plot_smoothed_xRV(data_pitch[PitcherThrows == "R" & BatterSide == "L"], paste("RHP vs LHH -", pitch, "xRV"))
+  lhp_rhh <- plot_smoothed_xRV(data_pitch[PitcherThrows == "L" & BatterSide == "R"], paste("LHP vs RHH -", pitch, "xRV"))
+  lhp_lhh <- plot_smoothed_xRV(data_pitch[PitcherThrows == "L" & BatterSide == "L"], paste("LHP vs LHH -", pitch, "xRV"))
+
+  # Display 2x2 grid
+  grid.arrange(rhp_rhh, rhp_lhh, lhp_rhh, lhp_lhh, ncol = 2)
+}
