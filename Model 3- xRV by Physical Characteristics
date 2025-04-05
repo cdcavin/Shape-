@@ -1,0 +1,56 @@
+# MODEL 3: Predicting xRV with Pitch Characteristics 
+
+# Load Required Libraries
+if (!requireNamespace("lme4", quietly = TRUE)) install.packages("lme4")
+if (!requireNamespace("data.table", quietly = TRUE)) install.packages("data.table")
+
+library(lme4)
+library(data.table)
+
+# Load MLB Dataset with Smoothed xRV
+data <- fread("mlb_data_with_Smoothed_xRV_sep.csv")
+setDT(data)
+
+# Standardize Velocity (MLB Only)
+mlb_mean <- mean(data$Velocity, na.rm = TRUE)
+mlb_sd <- sd(data$Velocity, na.rm = TRUE)
+data[, Velocity_Standardized := (Velocity - mlb_mean) / mlb_sd]
+
+# Drop Low-Velocity Fastballs
+velocity_threshold <- -1.0
+data <- data[!(PitchGroup == "Fastball" & Velocity_Standardized < velocity_threshold)]
+
+# Convert Required Variables to Factors
+factor_vars <- c("PitchGroup", "PitcherThrows", "BatterSide", "PitcherID")
+data[, (factor_vars) := lapply(.SD, as.factor), .SDcols = factor_vars]
+
+# Fit Mixed Effects Model (xRV ~ Pitch Characteristics)
+model3_mlb <- lmer(
+  xRV ~
+    PitchGroup * poly(Velocity_Standardized, 2, raw = TRUE) +
+    PitchGroup * poly(InducedVertBreak, 2, raw = TRUE) +
+    PitchGroup * poly(HorzBreak, 2, raw = TRUE) +
+    PitchGroup * poly(SpinRate, 2, raw = TRUE) +
+    PitchGroup * poly(VertApprAngle, 2, raw = TRUE) +
+    PitchGroup * poly(Extension, 2, raw = TRUE) +
+    PitchGroup * poly(RelHeight, 2, raw = TRUE) +
+    PitchGroup * (Velocity_Standardized * InducedVertBreak) +
+    PitchGroup * (Velocity_Standardized * HorzBreak) +
+    PitchGroup * (InducedVertBreak * SpinRate) +
+    PitchGroup * (Velocity_Standardized * Extension) +
+    PitchGroup * (HorzApprAngle * HorzBreak) +
+    PitchGroup * (VertApprAngle * HorzApprAngle) +
+    PitchGroup * (InducedVertBreak * RelHeight) +
+    PitchGroup * (HorzBreak * RelHeight) +
+    I(HorzBreak^2) + I(InducedVertBreak^2) + I(SpinRate^2) + I(Velocity_Standardized^2) +
+    PitcherThrows * BatterSide +
+    (1 | PitcherID),
+  data = data,
+  REML = FALSE
+)
+
+# Save Model
+saveRDS(model3_mlb, "model3_mlb_stuff_sep.rds")
+
+# Display Summary
+summary(model3_mlb)
