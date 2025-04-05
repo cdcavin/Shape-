@@ -1,0 +1,151 @@
+# PROCESS 2023 AND 2024 DATA 
+
+# Load Required Libraries
+if (!requireNamespace("dplyr", quietly = TRUE)) install.packages("dplyr")
+if (!requireNamespace("readr", quietly = TRUE)) install.packages("readr")
+if (!requireNamespace("data.table", quietly = TRUE)) install.packages("data.table")
+
+library(dplyr)
+library(readr)
+library(data.table)
+
+# Load & Process Function with Explicit Year Argument
+load_and_process <- function(file_path, year) {
+  read_csv(file_path) %>%
+    mutate(
+      game_date = as.Date(game_date),
+      game_year = year,  # Explicitly assign year from input
+      RunsScored = post_bat_score - bat_score
+    ) %>%
+    select(
+      pitcher, player_name, p_throws, batter, stand, balls, strikes, pitch_type, events,
+      release_speed, release_spin_rate, spin_axis, release_pos_z, release_extension,
+      release_pos_x, pfx_z, pfx_x, plate_z, plate_x, launch_speed, launch_angle,
+      bb_type, vy0, vx0, vz0, ay, ax, az, effective_speed,
+      bat_score, post_bat_score, RunsScored, game_date, game_year
+    ) %>%
+    rename(
+      PitcherID = pitcher, PitcherName = player_name, PitcherThrows = p_throws,
+      BatterID = batter, BatterSide = stand, Balls = balls, Strikes = strikes,
+      TaggedPitchType = pitch_type, PitchCall = events, Velocity = release_speed,
+      SpinRate = release_spin_rate, SpinAxis = spin_axis, RelHeight = release_pos_z,
+      Extension = release_extension, RelSide = release_pos_x, PfxZ = pfx_z, PfxX = pfx_x,
+      PlateLocHeight = plate_z, PlateLocSide = plate_x, LaunchSpeed = launch_speed,
+      LaunchAngle = launch_angle, BBType = bb_type, vy0 = vy0, vx0 = vx0, vz0 = vz0,
+      ay = ay, ax = ax, az = az, EffectiveSpeed = effective_speed
+    ) %>%
+    filter(!(TaggedPitchType %in% c("FF", "FA", "SI", "FC") & Velocity < 80)) %>%
+    mutate(
+      InducedVertBreak = PfxZ * 12,
+      HorzBreak = PfxX * 12,
+      VertApprAngle = ifelse(Extension == 0, NA,
+                             atan((PlateLocHeight - RelHeight) / Extension) * (180 / pi)),
+      HorzApprAngle = ifelse(Extension == 0, NA,
+                             atan((PlateLocSide - RelSide) / Extension) * (180 / pi)),
+      PlatoonAdvantage = as.factor(ifelse(PitcherThrows == BatterSide, 1, 0))
+    )
+}
+
+# Process 2023 and 2024 Separately with Explicit Year Input
+mlb_2023 <- load_and_process("MLB_Statcast_2023.csv", 2023)
+mlb_2024 <- load_and_process("MLB_Statcast_2024.csv", 2024)
+
+# Combine and Save
+mlb_combined <- bind_rows(mlb_2023, mlb_2024)
+write_csv(mlb_combined, "MLB_Statcast_2023_2024_combined.csv")
+
+# Confirmation Message
+print(" MLB 2023 and 2024 data successfully combined.")
+
+# BUCKET ALL PITCHES BY BATTED BALL
+# Load Required Libraries
+library(dplyr)
+library(readr)
+
+# Load Combined MLB Dataset
+mlb_data <- read_csv("MLB_Statcast_2023_2024_combined.csv")
+
+# Create Batted Ball Buckets Using BBType and LaunchSpeed
+mlb_data <- mlb_data %>%
+  mutate(
+    hard_hit = ifelse(LaunchSpeed >= 95, "Hard-Hit", "Soft-Hit"),
+
+    batted_ball_bucket = case_when(
+      hard_hit == "Hard-Hit" & BBType %in% c("ground_ball", "line_drive", "fly_ball") ~ "Hard-Hit GB/LD/FB",
+      hard_hit == "Soft-Hit" & BBType == "ground_ball" ~ "Soft GB",
+      hard_hit == "Soft-Hit" & BBType == "line_drive" ~ "Soft LD",
+      hard_hit == "Soft-Hit" & BBType == "fly_ball"   ~ "Soft FB",
+      hard_hit == "Soft-Hit" & BBType == "popup"      ~ "Soft Pop",
+      is.na(BBType) ~ "Not In Play",
+      TRUE ~ "Other"
+    )
+  )
+
+# Count Occurrences of Each Bucket
+bucket_counts <- mlb_data %>%
+  group_by(batted_ball_bucket) %>%
+  summarise(n = n(), .groups = "drop")
+
+# Print the Bucket Counts
+print(bucket_counts)
+
+# Save Updated Dataset
+write_csv(mlb_data, "mlb_combined_bucketed.csv")
+
+# GENERATE RUN EXP CHART
+# Load Required Libraries
+library(dplyr)
+library(readr)
+
+# Load the MLB Dataset with Batted Ball Buckets
+mlb_data <- read_csv("mlb_combined_bucketed.csv")
+
+# Compute Run Expectancy Per Bucket
+mlb_run_expectancy_chart <- mlb_data %>%
+  filter(!is.na(batted_ball_bucket)) %>%  # Exclude missing buckets
+  group_by(batted_ball_bucket) %>%
+  summarise(
+    count = n(),
+    avg_runs_scored = mean(RunsScored, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  arrange(desc(avg_runs_scored))
+
+# Print Chart
+print(mlb_run_expectancy_chart)
+
+# Save to CSV
+write_csv(mlb_run_expectancy_chart, "MLB_Run_Expectancy_Chart.csv")
+
+# ASSIGN ALL PITCHES RV
+# Load Required Libraries
+library(dplyr)
+library(readr)
+
+# Load Processed MLB Dataset and Run Expectancy Chart
+mlb_data <- read_csv("mlb_combined_bucketed.csv")
+run_expectancy_chart <- read_csv("MLB_Run_Expectancy_Chart.csv")
+
+# Assign Run Value for Non-Batted-Ball Events (based on PitchCall)
+mlb_data <- mlb_data %>%
+  mutate(non_bip_run_value = case_when(
+    PitchCall == "walk" ~ 0.31,
+    PitchCall == "strikeout" ~ -0.11,
+    PitchCall == "ball" ~ 0.027,
+    PitchCall == "called_strike" ~ -0.012,
+    PitchCall == "swinging_strike" ~ -0.017,
+    PitchCall == "foul" ~ -0.010,
+    PitchCall == "strike" ~ -0.017,
+    TRUE ~ NA_real_
+  ))
+
+# Join Run Expectancy Chart by Batted Ball Bucket
+mlb_data <- mlb_data %>%
+  left_join(run_expectancy_chart, by = "batted_ball_bucket")
+
+# Assign Final Run Value (Priority: avg_runs_scored > non_bip_run_value > 0)
+mlb_data <- mlb_data %>%
+  mutate(run_value = coalesce(avg_runs_scored, non_bip_run_value, 0))
+
+# Save Final Output
+write_csv(mlb_data, "model1_data.csv")
